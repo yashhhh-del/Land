@@ -1,3 +1,8 @@
+# AI Land Property Description Writer - Streamlit App
+
+## 📋 File: app.py
+
+```python
 import streamlit as st
 import requests
 import json
@@ -42,13 +47,6 @@ st.markdown("""
         border-left: 4px solid #ffc107;
         margin: 20px 0;
     }
-    .success-box {
-        background-color: #d4edda;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 4px solid #28a745;
-        margin: 20px 0;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -84,6 +82,7 @@ with st.sidebar:
     
     ### 🌟 Features:
     - AI-powered descriptions
+    - Regenerate for variations
     - Fully editable output
     - Multiple property types
     - Professional formatting
@@ -179,21 +178,29 @@ with col1:
         height=100
     )
     
-    # Generate Button
+    # Generate Buttons
     st.markdown("---")
-    generate_button = st.button("✨ Generate Description", disabled=not (st.session_state.api_key and location and area))
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        generate_button = st.button(
+            "✨ Generate Description", 
+            disabled=not (st.session_state.api_key and location and area), 
+            use_container_width=True
+        )
+    with col_btn2:
+        regenerate_button = st.button(
+            "🔄 Regenerate", 
+            disabled=not (st.session_state.api_key and location and area and st.session_state.description), 
+            use_container_width=True
+        )
 
 with col2:
     st.header("📄 Generated Description")
     
-    if generate_button:
-        if not st.session_state.api_key:
-            st.error("Please enter your Groq API key in the sidebar!")
-        elif not location or not area:
-            st.error("Please fill in at least Location and Area fields!")
-        else:
-            # Create prompt
-            prompt = f"""Write a professional and attractive property description for a land listing based on the following details:
+    # Function to generate description
+    def generate_description_from_api(temperature=0.7):
+        # Create prompt
+        prompt = f"""Write a professional and attractive property description for a land listing based on the following details:
 
 Property Type: {property_type}
 Location: {location}
@@ -208,41 +215,72 @@ Additional Information: {additional_info if additional_info else 'None'}
 
 Write a compelling description that highlights the key features, location advantages, and investment potential. Keep it professional, engaging, and around 150-200 words."""
 
-            # Call Groq API
-            with st.spinner("🤖 Generating description..."):
-                try:
-                    response = requests.post(
-                        "https://api.groq.com/openai/v1/chat/completions",
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {st.session_state.api_key}"
-                        },
-                        json={
-                            "model": "llama-3.3-70b-versatile",
-                            "messages": [
-                                {
-                                    "role": "user",
-                                    "content": prompt
-                                }
-                            ],
-                            "temperature": 0.7,
-                            "max_tokens": 500
-                        }
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        st.session_state.description = data['choices'][0]['message']['content']
-                        st.success("✅ Description generated successfully!")
-                    else:
-                        st.error(f"Error: {response.status_code} - {response.text}")
-                        st.error("Please check your API key and try again.")
+        # Call Groq API
+        with st.spinner("🤖 Generating description..."):
+            try:
+                response = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {st.session_state.api_key}"
+                    },
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": prompt
+                            }
+                        ],
+                        "temperature": temperature,
+                        "max_tokens": 500
+                    }
+                )
                 
-                except Exception as e:
-                    st.error(f"Error generating description: {str(e)}")
+                if response.status_code == 200:
+                    data = response.json()
+                    st.session_state.description = data['choices'][0]['message']['content']
+                    st.success("✅ Description generated successfully!")
+                else:
+                    st.error(f"Error: {response.status_code} - {response.text}")
+                    st.error("Please check your API key and try again.")
+            
+            except Exception as e:
+                st.error(f"Error generating description: {str(e)}")
+    
+    if generate_button or regenerate_button:
+        if not st.session_state.api_key:
+            st.error("Please enter your Groq API key in the sidebar!")
+        elif not location or not area:
+            st.error("Please fill in at least Location and Area fields!")
+        else:
+            # Use higher temperature for regenerate to get different results
+            temperature = 0.9 if regenerate_button else 0.7
+            generate_description_from_api(temperature)
     
     # Display and edit description
     if st.session_state.description:
+        # Action buttons above the description
+        col_act1, col_act2, col_act3 = st.columns(3)
+        with col_act1:
+            if st.button("📋 Copy to Clipboard", use_container_width=True):
+                st.code(st.session_state.description, language=None)
+                st.success("✅ Ready to copy! Select the text above.")
+        with col_act2:
+            st.download_button(
+                label="💾 Download",
+                data=st.session_state.description,
+                file_name="property_description.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+        with col_act3:
+            if st.button("🗑️ Clear", use_container_width=True):
+                st.session_state.description = ""
+                st.rerun()
+        
+        st.markdown("---")
+        
         edited_description = st.text_area(
             "Edit Description (if needed)",
             value=st.session_state.description,
@@ -250,23 +288,6 @@ Write a compelling description that highlights the key features, location advant
             help="You can edit the generated description here"
         )
         st.session_state.description = edited_description
-        
-        # Copy button
-        if st.button("📋 Copy to Clipboard"):
-            st.code(st.session_state.description, language=None)
-            st.markdown("""
-            <div class="success-box">
-                ✅ Description is ready! Select and copy the text above.
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Download button
-        st.download_button(
-            label="💾 Download as Text File",
-            data=st.session_state.description,
-            file_name="property_description.txt",
-            mime="text/plain"
-        )
     else:
         st.markdown("""
         <div class="description-box">
@@ -284,3 +305,60 @@ st.markdown("""
     <p>Made with ❤️ using Streamlit & Groq AI | Get your free API key at <a href="https://console.groq.com" target="_blank">console.groq.com</a></p>
 </div>
 """, unsafe_allow_html=True)
+```
+
+---
+
+## 📋 File: requirements.txt
+
+```
+streamlit
+requests
+```
+
+---
+
+## 🚀 Deployment Instructions
+
+### Option 1: Streamlit Cloud (Recommended)
+
+1. **Create GitHub Repository**
+   - Create a new repository on GitHub
+   - Upload `app.py` and `requirements.txt`
+
+2. **Deploy to Streamlit Cloud**
+   - Go to [share.streamlit.io](https://share.streamlit.io)
+   - Click "New app"
+   - Select your repository
+   - Main file path: `app.py`
+   - Click "Deploy"
+
+### Option 2: Local Testing
+
+```bash
+# Install dependencies
+pip install streamlit requests
+
+# Run the app
+streamlit run app.py
+```
+
+---
+
+## 🔑 Setup
+
+1. Get your free Groq API key from [console.groq.com](https://console.groq.com)
+2. Enter the API key in the sidebar when running the app
+3. Start generating property descriptions!
+
+---
+
+## ✨ Features
+
+- ✅ AI-powered description generation
+- ✅ Regenerate for different variations
+- ✅ Fully editable output
+- ✅ Download as text file
+- ✅ Multiple property types support
+- ✅ Professional formatting
+- ✅ Responsive design
