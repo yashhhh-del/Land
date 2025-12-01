@@ -1,353 +1,286 @@
-import React, { useState } from 'react';
-import { FileText, Sparkles, Edit2, Save, Copy, Check } from 'lucide-react';
+import streamlit as st
+import requests
+import json
 
-export default function LandPropertyWriter() {
-  const [formData, setFormData] = useState({
-    propertyType: 'Residential Plot',
-    location: '',
-    area: '',
-    unit: 'sq ft',
-    price: '',
-    facing: 'East',
-    roadWidth: '',
-    surroundings: '',
-    amenities: '',
-    legalStatus: 'Clear Title',
-    additionalInfo: ''
-  });
+# Page configuration
+st.set_page_config(
+    page_title="AI Property Description Writer",
+    page_icon="🏡",
+    layout="wide"
+)
 
-  const [description, setDescription] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const generateDescription = async () => {
-    setLoading(true);
-    setError('');
-    
-    const prompt = `Write a professional and attractive property description for a land listing based on the following details:
-
-Property Type: ${formData.propertyType}
-Location: ${formData.location}
-Area: ${formData.area} ${formData.unit}
-Price: ${formData.price}
-Facing: ${formData.facing}
-Road Width: ${formData.roadWidth}
-Surroundings: ${formData.surroundings}
-Amenities: ${formData.amenities}
-Legal Status: ${formData.legalStatus}
-Additional Information: ${formData.additionalInfo}
-
-Write a compelling description that highlights the key features, location advantages, and investment potential. Keep it professional, engaging, and around 150-200 words.`;
-
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer YOUR_GROQ_API_KEY_HERE'
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 500
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate description. Please check your API key.');
-      }
-
-      const data = await response.json();
-      setDescription(data.choices[0].message.content);
-      setIsEditing(false);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+# Custom CSS
+st.markdown("""
+<style>
+    .main {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     }
-  };
+    .stButton>button {
+        width: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 8px;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #764ba2 0%, #667eea 100%);
+    }
+    .description-box {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+        min-height: 300px;
+    }
+    .info-box {
+        background-color: #fff3cd;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #ffc107;
+        margin: 20px 0;
+    }
+    .success-box {
+        background-color: #d4edda;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #28a745;
+        margin: 20px 0;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(description);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+# Initialize session state
+if 'description' not in st.session_state:
+    st.session_state.description = ""
+if 'api_key' not in st.session_state:
+    st.session_state.api_key = ""
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
-            <div className="flex items-center gap-3">
-              <FileText className="w-8 h-8" />
-              <div>
-                <h1 className="text-3xl font-bold">AI Property Description Writer</h1>
-                <p className="text-blue-100 mt-1">Generate professional land property descriptions instantly</p>
-              </div>
-            </div>
-          </div>
+# Header
+st.title("🏡 AI Land Property Description Writer")
+st.markdown("Generate professional land property descriptions instantly using AI")
 
-          <div className="grid md:grid-cols-2 gap-6 p-6">
-            {/* Form Section */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Property Details</h2>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
-                <select
-                  name="propertyType"
-                  value={formData.propertyType}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option>Residential Plot</option>
-                  <option>Commercial Plot</option>
-                  <option>Agricultural Land</option>
-                  <option>Industrial Plot</option>
-                  <option>Farm Land</option>
-                </select>
-              </div>
+# Sidebar for API Key
+with st.sidebar:
+    st.header("⚙️ Settings")
+    api_key = st.text_input(
+        "Groq API Key",
+        type="password",
+        value=st.session_state.api_key,
+        help="Get your free API key from console.groq.com"
+    )
+    st.session_state.api_key = api_key
+    
+    st.markdown("---")
+    st.markdown("""
+    ### 📝 How to Use:
+    1. Get free API key from [console.groq.com](https://console.groq.com)
+    2. Enter API key in the field above
+    3. Fill property details
+    4. Click Generate
+    5. Edit and copy description
+    
+    ### 🌟 Features:
+    - AI-powered descriptions
+    - Fully editable output
+    - Multiple property types
+    - Professional formatting
+    """)
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
-                <input
-                  type="text"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleInputChange}
-                  placeholder="e.g., Near Highway, City Center"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Area *</label>
-                  <input
-                    type="text"
-                    name="area"
-                    value={formData.area}
-                    onChange={handleInputChange}
-                    placeholder="1000"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-                  <select
-                    name="unit"
-                    value={formData.unit}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option>sq ft</option>
-                    <option>sq yards</option>
-                    <option>acres</option>
-                    <option>hectares</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
-                <input
-                  type="text"
-                  name="price"
-                  value={formData.price}
-                  onChange={handleInputChange}
-                  placeholder="e.g., ₹50 Lakhs"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Facing</label>
-                  <select
-                    name="facing"
-                    value={formData.facing}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option>East</option>
-                    <option>West</option>
-                    <option>North</option>
-                    <option>South</option>
-                    <option>North-East</option>
-                    <option>South-East</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Road Width</label>
-                  <input
-                    type="text"
-                    name="roadWidth"
-                    value={formData.roadWidth}
-                    onChange={handleInputChange}
-                    placeholder="e.g., 40 ft"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Surroundings</label>
-                <input
-                  type="text"
-                  name="surroundings"
-                  value={formData.surroundings}
-                  onChange={handleInputChange}
-                  placeholder="Schools, hospitals, markets nearby"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amenities</label>
-                <input
-                  type="text"
-                  name="amenities"
-                  value={formData.amenities}
-                  onChange={handleInputChange}
-                  placeholder="Water, electricity, drainage"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Legal Status</label>
-                <select
-                  name="legalStatus"
-                  value={formData.legalStatus}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option>Clear Title</option>
-                  <option>Approved Layout</option>
-                  <option>RERA Approved</option>
-                  <option>Freehold</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Information</label>
-                <textarea
-                  name="additionalInfo"
-                  value={formData.additionalInfo}
-                  onChange={handleInputChange}
-                  placeholder="Any other details..."
-                  rows="3"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <button
-                onClick={generateDescription}
-                disabled={loading || !formData.location || !formData.area}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" />
-                    Generate Description
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Description Section */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-800">Generated Description</h2>
-                {description && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setIsEditing(!isEditing)}
-                      className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2 transition-colors"
-                    >
-                      {isEditing ? <Save className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                      {isEditing ? 'Save' : 'Edit'}
-                    </button>
-                    <button
-                      onClick={copyToClipboard}
-                      className="px-3 py-2 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded-lg flex items-center gap-2 transition-colors"
-                    >
-                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-6 min-h-[400px] border-2 border-gray-200">
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg mb-4">
-                    <p className="font-medium">Error:</p>
-                    <p className="text-sm">{error}</p>
-                    <p className="text-xs mt-2">Please replace 'YOUR_GROQ_API_KEY_HERE' with your actual Groq API key in the code.</p>
-                  </div>
-                )}
-                
-                {!description && !error && (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                    <FileText className="w-16 h-16 mb-4" />
-                    <p className="text-center">Fill in the property details and click<br/>"Generate Description" to create your listing</p>
-                  </div>
-                )}
-
-                {description && (
-                  isEditing ? (
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="w-full h-full min-h-[350px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    />
-                  ) : (
-                    <div className="prose prose-sm max-w-none">
-                      <p className="whitespace-pre-wrap text-gray-700 leading-relaxed">{description}</p>
-                    </div>
-                  )
-                )}
-              </div>
-
-              {description && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800">
-                    <strong>Tip:</strong> You can edit the generated description by clicking the "Edit" button above. The description is fully customizable to match your needs.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Setup Instructions */}
-          <div className="bg-yellow-50 border-t border-yellow-200 p-4">
-            <p className="text-sm text-yellow-800">
-              <strong>Setup Required:</strong> Replace <code className="bg-yellow-100 px-2 py-1 rounded">YOUR_GROQ_API_KEY_HERE</code> in the code with your free Groq API key. 
-              Get yours at <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">console.groq.com</a>
-            </p>
-          </div>
-        </div>
-      </div>
+# Main content
+if not st.session_state.api_key:
+    st.markdown("""
+    <div class="info-box">
+        <h4>⚠️ API Key Required</h4>
+        <p>Please enter your Groq API key in the sidebar to get started.</p>
+        <p>Get your free API key from <a href="https://console.groq.com" target="_blank">console.groq.com</a></p>
     </div>
-  );
-}
+    """, unsafe_allow_html=True)
+
+# Create two columns
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.header("📋 Property Details")
+    
+    # Property Type
+    property_type = st.selectbox(
+        "Property Type",
+        ["Residential Plot", "Commercial Plot", "Agricultural Land", "Industrial Plot", "Farm Land"]
+    )
+    
+    # Location
+    location = st.text_input(
+        "Location *",
+        placeholder="e.g., Near Highway, City Center",
+        help="Enter the property location"
+    )
+    
+    # Area and Unit
+    col_area1, col_area2 = st.columns([2, 1])
+    with col_area1:
+        area = st.text_input(
+            "Area *",
+            placeholder="1000",
+            help="Enter the property area"
+        )
+    with col_area2:
+        unit = st.selectbox(
+            "Unit",
+            ["sq ft", "sq yards", "acres", "hectares"]
+        )
+    
+    # Price
+    price = st.text_input(
+        "Price",
+        placeholder="e.g., ₹50 Lakhs",
+        help="Enter the property price"
+    )
+    
+    # Facing and Road Width
+    col_fr1, col_fr2 = st.columns(2)
+    with col_fr1:
+        facing = st.selectbox(
+            "Facing",
+            ["East", "West", "North", "South", "North-East", "South-East", "North-West", "South-West"]
+        )
+    with col_fr2:
+        road_width = st.text_input(
+            "Road Width",
+            placeholder="e.g., 40 ft"
+        )
+    
+    # Surroundings
+    surroundings = st.text_input(
+        "Surroundings",
+        placeholder="Schools, hospitals, markets nearby",
+        help="What's around the property?"
+    )
+    
+    # Amenities
+    amenities = st.text_input(
+        "Amenities",
+        placeholder="Water, electricity, drainage",
+        help="Available amenities"
+    )
+    
+    # Legal Status
+    legal_status = st.selectbox(
+        "Legal Status",
+        ["Clear Title", "Approved Layout", "RERA Approved", "Freehold", "Leasehold"]
+    )
+    
+    # Additional Information
+    additional_info = st.text_area(
+        "Additional Information",
+        placeholder="Any other details...",
+        height=100
+    )
+    
+    # Generate Button
+    st.markdown("---")
+    generate_button = st.button("✨ Generate Description", disabled=not (st.session_state.api_key and location and area))
+
+with col2:
+    st.header("📄 Generated Description")
+    
+    if generate_button:
+        if not st.session_state.api_key:
+            st.error("Please enter your Groq API key in the sidebar!")
+        elif not location or not area:
+            st.error("Please fill in at least Location and Area fields!")
+        else:
+            # Create prompt
+            prompt = f"""Write a professional and attractive property description for a land listing based on the following details:
+
+Property Type: {property_type}
+Location: {location}
+Area: {area} {unit}
+Price: {price if price else 'Not specified'}
+Facing: {facing}
+Road Width: {road_width if road_width else 'Not specified'}
+Surroundings: {surroundings if surroundings else 'Not specified'}
+Amenities: {amenities if amenities else 'Not specified'}
+Legal Status: {legal_status}
+Additional Information: {additional_info if additional_info else 'None'}
+
+Write a compelling description that highlights the key features, location advantages, and investment potential. Keep it professional, engaging, and around 150-200 words."""
+
+            # Call Groq API
+            with st.spinner("🤖 Generating description..."):
+                try:
+                    response = requests.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {st.session_state.api_key}"
+                        },
+                        json={
+                            "model": "llama-3.3-70b-versatile",
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": prompt
+                                }
+                            ],
+                            "temperature": 0.7,
+                            "max_tokens": 500
+                        }
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        st.session_state.description = data['choices'][0]['message']['content']
+                        st.success("✅ Description generated successfully!")
+                    else:
+                        st.error(f"Error: {response.status_code} - {response.text}")
+                        st.error("Please check your API key and try again.")
+                
+                except Exception as e:
+                    st.error(f"Error generating description: {str(e)}")
+    
+    # Display and edit description
+    if st.session_state.description:
+        edited_description = st.text_area(
+            "Edit Description (if needed)",
+            value=st.session_state.description,
+            height=350,
+            help="You can edit the generated description here"
+        )
+        st.session_state.description = edited_description
+        
+        # Copy button
+        if st.button("📋 Copy to Clipboard"):
+            st.code(st.session_state.description, language=None)
+            st.markdown("""
+            <div class="success-box">
+                ✅ Description is ready! Select and copy the text above.
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Download button
+        st.download_button(
+            label="💾 Download as Text File",
+            data=st.session_state.description,
+            file_name="property_description.txt",
+            mime="text/plain"
+        )
+    else:
+        st.markdown("""
+        <div class="description-box">
+            <div style="text-align: center; padding: 50px;">
+                <h3 style="color: #666;">📝 No Description Yet</h3>
+                <p style="color: #999;">Fill in the property details and click "Generate Description" to create your listing</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #666; padding: 20px;">
+    <p>Made with ❤️ using Streamlit & Groq AI | Get your free API key at <a href="https://console.groq.com" target="_blank">console.groq.com</a></p>
+</div>
+""", unsafe_allow_html=True)
