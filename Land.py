@@ -1,8 +1,3 @@
-# AI Land Property Description Writer - Streamlit App
-
-## Copy the code below and save as app.py
-
-```python
 import streamlit as st
 import requests
 import json
@@ -281,21 +276,3 @@ st.markdown("""
     <p>Made with Streamlit & Groq AI | Get your free API key at <a href="https://console.groq.com" target="_blank">console.groq.com</a></p>
 </div>
 """, unsafe_allow_html=True)
-```
-
----
-
-## requirements.txt
-
-```
-streamlit
-requests
-```
-
----
-
-## Deployment Steps
-
-1. Save the code above as `app.py`
-2. Create `requirements.txt` with the dependencies listed above
-3. Deploy to Streamlit Cloud or run locally with: `streamlit run app.py`
